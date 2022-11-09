@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Artificial Bug</title>
+    <style>
+        body { width: 768px; margin: 0 auto; }   
+        h1,h2 { text-align: center; }
+        p { text-align: justify; text-justify: inter-word; }
+        table,td,th { border: 2px solid #808080; border-collapse: collapse; }
+        button { padding: 0px 0px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1 id="main-header">Artificial Bug</h1>
+    <h2>Play with finite state machines to solve the BUG problem!</h2>
+    <div style="display:inline-block;vertical-align:top;">
+    <canvas id="main" width="520" height="520" style="border:1px solid #808080;"></canvas>
+    </div>
+    <div style="display:inline-block;vertical-align:top;">
+    <form>
+        Your finite state machine:<br/>
+        <textarea id="input-fsm" name="fsm" rows="5" cols="25">N1
+M0{F0}{[1}
+N2
+N3
+N4</textarea>
+    </form>
+    <div style="display:inline-block;vertical-align:top;"><button type="button" onclick="parse();">Parse</button></div>
+    <div style="display:inline-block;vertical-align:top;"><button type="button" id="btn-step" onclick="step();">Step</button></div>
+    <div style="display:inline-block;vertical-align:top;"><button type="button" onclick="resetFSM();">Reset bug</button></div>
+    <div id="parsed-0"></div>
+    <div id="parsed-1"></div>
+    <div id="parsed-2"></div>
+    <div id="parsed-3"></div>
+    <div id="parsed-4"></div>
+    <table>
+        <tr><th>Predicate</th><th>Value</th></tr>
+        <tr><td>State</td><td id="vars-state"></td></tr>
+        <tr><td>M0 :: Can move forward?</td><td id="vars-m0"></td></tr>
+        <tr><td>M1 :: Can move right?</td><td id="vars-m1"></td></tr>
+        <tr><td>M2 :: Can move backward?</td><td id="vars-m2"></td></tr>
+        <tr><td>M3 :: Can move left?</td><td id="vars-m3"></td></tr>
+        <tr><td>C0 :: Is move forward cool?</td><td id="vars-c0"></td></tr>
+        <tr><td>C1 :: Is move right cool?</td><td id="vars-c1"></td></tr>
+        <tr><td>C2 :: Is move backward cool?</td><td id="vars-c2"></td></tr>
+        <tr><td>C3 :: Is move left cool?</td><td id="vars-c3"></td></tr>
+        <tr><td>?T :: Is at target?</td><td id="vars-qt"></td></tr>
+        <tr><td>?S :: Is at saved position?</td><td id="vars-qs"></td></tr>
+        <tr><td>?B :: Is better than saved?</td><td id="vars-qb"></td></tr>
+    </table>
+    </div>
+    <div>
+    <h2>What is this all about?</h2>
+    <p>
+        You need to design a finite state machine that will guard the bug (the blue triangle) through the obstacles (the gray cells)
+        towards the target (the green cell) or determine that the target is unreachable.
+    </p>
+    <p>
+        The bug has a direction (pointed by the triangle's vertex), so it can rotate and move forward. However, if it moves forward
+        and hits an obstacle, it dies. In order not to die young, the bug can see whether there are obstacles around.
+        The finite state machine accesses these sensors through predicates &laquo;M0 :: Can move forward?&raquo;,
+        &laquo;M1 :: Can move right?&raquo;, &laquo;M2 :: Can move backward?&raquo;, &laquo;M3 :: Can move left?&raquo;.
+        Note that, in this simulator, the outer world also counts as an obstacle.
+    </p>
+    <p>
+        The bug has a rudimentary &laquo;sense of target&raquo;, so it can feel whether it gets closer to the target (using the <b>Manhattan metric</b>,
+        that is, the sum of distances by axes X and Y) if it moves to an adjacent cell.  
+        The finite state machine accesses these sensors through predicates &laquo;C0 :: Is move forward cool?&raquo;,
+        &laquo;C1 :: Is move right cool?&raquo;, &laquo;C2 :: Is move backward cool?&raquo;, &laquo;C3 :: Is move left cool?&raquo;.
+        Note, however, that the move can be cool even if it is impossible! Yet another predicate, &laquo;?T :: Is at target?&raquo;,
+        tests whether the bug is already at the target. This predicate is not strictly necessary, but it makes the life a little bit easier.
+    </p>
+    <p>
+        There is one more component, without which the life of the bug would be too hard. The bug can remember a position (the memory cell and the direction) where it has already been,
+        and it can compare whether it is exactly at that position, or it is closer to the target than the saved cell.
+        This data is accessible to the finite state machine as &laquo;?S :: Is at saved position?&raquo; and &laquo;?B :: Is better than saved?&raquo; predicates.
+    </p>
+    <p>
+        As the number of predicates is quite large, each state of the finite state machine, which is the brain of the bug, is a decision tree.
+        Each leaf of the decision tree is the action, which the bug should perform, and the number of the next state. The actions
+        that do not terminate the process are:
+        &laquo;N :: Do nothing&raquo;, &laquo;F :: Move forward&raquo;, &laquo;S :: Save position&raquo;, &laquo;[ :: Rotate counter-clockwise&raquo;,
+        &laquo;] :: Rotate clockwise&raquo;. There are also two actions which correspond to the final decisions of the bug:
+        &laquo;+ :: Report reached&raquo; and &laquo;- :: Report unreachable&raquo;.
+        The first of these actions must be issued when the bug is at the target, and the second when the target is impossible to reach without
+        hitting an obstacle.
+    </p>
+    <p>
+        The internal node of the decision tree are the predicates.
+        Each decision tree is written as a single line of characters, the grammar for which is given at the end of the page.
+    </p>
+    <h2>The goal</h2>
+    <p>
+        You need to find the finite state machine which will <b>act correctly on every imaginable field</b>.
+    </p>
+    <p>
+        One cannot check this property in any way except formal verification. The testing system will get close to that
+        by testing your submissions on a large number of inputs and also by using certain heuristics regarding unreachable fields.
+        This visualizer cannot do even that, but you can use it to check how your finite state machine acts on certain fields.
+    </p>
+    <h2>What you can do in the visualizer</h2>
+    <ul>
+        <li>Enter and validate your finite state machine for syntactic correctness (the &laquo;Parse&raquo; button).</li>
+        <li>Watch the behaviour of your finite state machine on a field, including the current state and the predicate values (the &laquo;Step&raquo; button).</li>
+        <li>Alter the field by clicking on it. The finite state machine will reset on each such change as a safety measure: a correct machine may store some information
+            about the field, which gets inconsistent when you edit it. Note every possible edit is currently possible.</li>
+    </ul>
+    <h2>Syntax and semantics of finite state machines</h2>
+    <p>The <i>i</i>-th line (counting from 0) must contain the code for the <i>i</i>-th state. The grammar is as follows:</p>
+    <table>
+        <tr><th width="150">Derivation</th><th>Semantics</th></tr>
+        <tr><td><i>S</i> <code>::= +</code></td><td>Report that the target is reached</td></tr>
+        <tr><td><i>S</i> <code>::= -</code></td><td>Report that the target is unreachable</td></tr>
+        <tr><td><i>S</i> <code>::= N</code><i>x</i></td><td>Do nothing, go to state <i>x</i></td></tr>
+        <tr><td><i>S</i> <code>::= F</code><i>x</i></td><td>Move forward, go to state <i>x</i></td></tr>
+        <tr><td><i>S</i> <code>::= S</code><i>x</i></td><td>Save position, go to state <i>x</i></td></tr>
+        <tr><td><i>S</i> <code>::= [</code><i>x</i></td><td>Rotate counter-clockwise, go to state <i>x</i></td></tr>
+        <tr><td><i>S</i> <code>::= ]</code><i>x</i></td><td>Rotate clockwise, go to state <i>x</i></td></tr>
+        <tr><td><i>S</i> <code>::= M</code><i>x</i><code>{</code><i>S<sub>1</sub></i><code>}{</code><i>S<sub>2</sub></i><code>}</code></td><td>If can move in direction <i>x</i>, execute <i>S<sub>1</sub></i>, otherwise execute <i>S<sub>2</sub></i></td></tr>
+        <tr><td><i>S</i> <code>::= C</code><i>x</i><code>{</code><i>S<sub>1</sub></i><code>}{</code><i>S<sub>2</sub></i><code>}</code></td><td>If moving in direction <i>x</i> would decrease the Hamming distance to the target, execute <i>S<sub>1</sub></i>, otherwise execute <i>S<sub>2</sub></i></td></tr>
+        <tr><td><i>S</i> <code>::= ?S{</code><i>S<sub>1</sub></i><code>}{</code><i>S<sub>2</sub></i><code>}</code></td><td>If at the saved location, execute <i>S<sub>1</sub></i>, otherwise execute <i>S<sub>2</sub></i></td></tr>
+        <tr><td><i>S</i> <code>::= ?B{</code><i>S<sub>1</sub></i><code>}{</code><i>S<sub>2</sub></i><code>}</code></td><td>If closer to the target (by the Hamming distance) than at the saved location, execute <i>S<sub>1</sub></i>, otherwise execute <i>S<sub>2</sub></i></td></tr>
+        <tr><td><i>S</i> <code>::= ?T{</code><i>S<sub>1</sub></i><code>}{</code><i>S<sub>2</sub></i><code>}</code></td><td>If at the target, execute <i>S<sub>1</sub></i>, otherwise execute <i>S<sub>2</sub></i></td></tr>
+    </table>
+    </div>
+    <script>
+        var canvas = document.getElementById("main");
+
+        var size = 20, cellWH = 26;
+        var bugX = (Math.random() * size) | 0, bugY = (Math.random() * size) | 0, bugD = (Math.random() * 4) | 0;
+        var saveX = bugX, saveY = bugY, saveD = bugD;
+        var trgX = (Math.random() * size) | 0, trgY = (Math.random() * size) | 0;
+        var state = 0;
+        var stateCodes = ["", "", "", "", ""];
+        var parsedOK = true;
+        var crashed = false;
+
+        var dx = [1, 0, -1, 0];
+        var dy = [0, 1, 0, -1];
+
+        var maxStateAsString = "4";
+
+        var field = [];
+        for (var i = 0; i < size; ++i) {
+            field.push([]);
+            for (var j = 0; j < size; ++j) {
+                if (Math.random() < 0.1) {
+                    field[i].push("#");
+                } else {
+                    field[i].push(" ");
+                }
+            }
+        }
+        field[trgX][trgY] = " ";
+        field[bugX][bugY] = " ";
+
+        // Field click events
+
+        function fieldClick(event) {
+            var x = ((event.pageX - canvas.offsetLeft) / cellWH) | 0;
+            var y = ((event.pageY - canvas.offsetTop) / cellWH) | 0;
+            if (x == trgX && y == trgY) {
+                //
+            } else if (x == bugX && y == bugY) {
+                //
+            } else if (field[x][y] == " ") {
+                field[x][y] = "#";
+            } else {
+                field[x][y] = " ";
+            }
+            resetFSM();
+        }
+
+        canvas.addEventListener("click", fieldClick, false);
+
+        // Actions
+
+        function step() {
+            executeProgram(stateCodes[state], 0, stateCodes[state].length);
+            repaint();
+        }
+
+        function resetFSM() {
+            saveX = bugX;
+            saveY = bugY;
+            saveD = bugD;
+            state = 0;
+            crashed = false;
+            setStepperEnabled(parsedOK);
+            repaint();
+        }
+
+        // Predicates
+
+        function canMove(dir) {
+            dir = (dir + bugD) & 3;
+            var newX = bugX + dx[dir], newY = bugY + dy[dir];
+            return newX >= 0 && newY >= 0 && newX < size && newY < size && field[newX][newY] == " ";
+        }
+
+        function moveCool(dir) {
+            dir = (dir + bugD) & 3;
+            var newX = bugX + dx[dir], newY = bugY + dy[dir];
+            return Math.abs(bugX - trgX) + Math.abs(bugY - trgY) > Math.abs(newX - trgX) + Math.abs(newY - trgY);
+        }
+
+        function isBetterThanSaved() { return Math.abs(bugX - trgX) + Math.abs(bugY - trgY) < Math.abs(saveX - trgX) + Math.abs(saveY - trgY); }
+        function isAtSaved() { return bugX == saveX && bugY == saveY && bugD == saveD; }
+        function isAtTarget() { return bugX == trgX && bugY == trgY; }
+
+        // Validation and execution
+
+        function syntaxError(text, start, end) {
+            window.alert("Syntax error! " + text + ". validateInput(" + start + ", " + end + ") was called.");
+            return false;
+        }
+
+        function assertionError(text, start, end) {
+            window.alert("Assertion error! " + text + ". validateInput(" + start + ", " + end + ") was called.");
+            return false;
+        }
+
+        function findClosingBracket(program, start, end) {
+            var braces = 0;
+            for (var i = start + 3; i < end; ++i) {
+                if (program[i] == "{") ++braces;
+                if (program[i] == "}") {
+                    --braces;
+                    if (braces < 0) {
+                        return i;
+                    }
+                }
+            }
+            return assertionError("This line cannot be reached", start, end);
+        }
+
+        function digestState(state, stateAcc) {
+            if (state > maxStateAsString) {
+                window.alert("Too many states!");
+                return false;
+            }
+            if (!validateInput(stateAcc, 0, stateAcc.length)) {
+                return false;
+            }
+            stateCodes[state] = stateAcc;
+            document.getElementById("parsed-" + state).innerText = "State " + state + ": " + stateAcc;
+            return true;
+        }
+
+        function setStepperEnabled(isEnabled) {
+            document.getElementById("btn-step").disabled = !isEnabled;
+        }
+
+        function parse() {
+            parsedOK = parseImpl();
+            resetFSM();
+        }
+
+        function parseImpl() {
+            var text = document.getElementById("input-fsm").value;
+            var textLength = text.length;
+            var state = 0;
+            var stateAcc = "";
+            for (var i = 0; i <= maxStateAsString; ++i) {
+                stateCodes[i] = "";
+                document.getElementById("parsed-" + i).innerText = "State " + i + ": !NOT PARSED!";
+            }
+            for (var i = 0; i < textLength; ++i) {
+                if (text[i] < " ") { // end-of-line
+                    if (stateAcc.length > 0) {
+                        if (!digestState(state, stateAcc)) return false;
+                        stateAcc = "";
+                        ++state;
+                    }
+                } else if (text[i] > " ") {
+                    stateAcc += text[i];
+                }
+            }
+            return stateAcc.length == 0 || digestState(state, stateAcc);
+        }
+
+        function validateInput(program, start, end) {
+            if (start == end) return syntaxError("Empty program is invalid", start, end);
+            if (start > end)  return assertionError("Start greater than end", start, end);
+            switch (program[start]) {
+                case "+": // action: report reached
+                case "-": // action: report unreachable
+                    if (end != start + 1) return syntaxError("Actions +,- cannot be followed by more code", start, end);
+                    return true;
+                case "N": // action: do nothing
+                case "F": // action: move forward
+                case "S": // action: save position
+                case "[": // action: rotate counter-clockwise
+                case "]": // action: rotate clockwise
+                    if (end == start + 1) return syntaxError("Actions N,F,S,[,] must be followed by state number", start, end);
+                    if (program[start + 1] < "0" ||
+                        program[start + 1] > maxStateAsString) return syntaxError("Actions N,F,S,[,] must be followed by state number, found '" + program[start + 1] + "'", start, end);
+                    if (end != start + 2) return syntaxError("State number cannot be followed by more code", start, end);
+                    return true;
+                case "M": // query: can move ...?
+                case "C": // query: is move ... cool?
+                    if (end == start + 1) return syntaxError("Queries M and C must be followed by a number 0..3 and alternatives", start, end);
+                    if (program[start + 1] < "0" ||
+                        program[start + 1] > "3") return syntaxError("Queries M and C must be followed by a number 0..3, found '" + program[start + 1] + "'", start, end);
+                    break; // header parsed
+                case "?": // other queries:
+                    if (end == start + 1) return syntaxError("Query ? must be followed by B|T|S and alternatives", start, end);
+                    if (program[start + 1] != "B" &&
+                        program[start + 1] != "T" &&
+                        program[start + 1] != "S") return syntaxError("Query ? must be followed by B|T|S, found '" + program[start + 1] + "'", start, end);
+                    break; // header parsed
+                default:
+                    return syntaxError("Unknown command '" + program[start] + "'", start, end);
+            }
+            // If we are here, we need to parse alternatives
+            if (start + 2 == end) return syntaxError("Expected { true code }{ false code } after " + program.substr(start, start + 2) + ", found nothing", start, end);
+            if (program[start + 2] != "{") return syntaxError("Expected { true code }{ false code } after " + program.substr(start, start + 2) + ", found something starting with '" + program[start + 2] + "'", start, end);
+            if (program[end - 1] != "}") return syntaxError("Expected { true code }{ false code } after " + program.substr(start, start + 2) + ", found something ending with '" + program[end - 1] + "'", start, end);
+            var closing = findClosingBracket(program, start, end);
+            if (closing + 1 == end) return syntaxError("Expected { true code }{ false code } after " + program.substr(start, start + 2) + ", only the first block found", start, end);
+            if (program[closing + 1] != "{") return syntaxError("Expected { true code }{ false code } after " + program.substr(start, start + 2) + ", second block starts with '" + program[closing + 1] + "'", start, end);
+            return validateInput(program, start + 3, closing) && validateInput(program, closing + 2, end - 1);
+        }
+
+        function executeProgram(program, start, end) {
+            var queryResult = false;
+            switch (program[start]) {
+                case "N": // action: do nothing
+                    state = program[start + 1] - "0"; return;
+                case "F": // action: move forward
+                    if (canMove(0)) {
+                        bugX += dx[bugD]; bugY += dy[bugD];
+                        state = program[start + 1] - "0";
+                    } else {
+                        state = "XXX";
+                        crashed = true;
+                        setStepperEnabled(false);
+                    }
+                    return;
+                case "S": // action: save position
+                    saveX = bugX; saveY = bugY; saveD = bugD;
+                    state = program[start + 1] - "0"; return;
+                case "[": // action: rotate counter-clockwise
+                    bugD = (bugD - 1) & 3;
+                    state = program[start + 1] - "0"; return;
+                case "]": // action: rotate clockwise
+                    bugD = (bugD + 1) & 3;
+                    state = program[start + 1] - "0"; return;
+                case "+": // action: report reached
+                    if (isAtTarget()) {
+                        state = "R+";
+                    } else {
+                        state = "R-";
+                        crashed = true;
+                    }
+                    setStepperEnabled(false);
+                    return;
+                case "-": // action: report unreachable
+                    state = "U";
+                    setStepperEnabled(false);
+                    return;
+                case "M": queryResult =  canMove(program[start + 1] - "0"); break;
+                case "C": queryResult = moveCool(program[start + 1] - "0"); break;
+                case "?":
+                    switch (program[start + 1]) {
+                        case "B": queryResult = isBetterThanSaved(); break;
+                        case "S": queryResult = isAtSaved(); break;
+                        case "T": queryResult = isAtTarget(); break;
+                        default: window.alert("Assertion error: Illegal code '" + program.substr(start, start + 2) + "'");
+                    }
+                    break;
+                default: window.alert("Assertion error: Illegal code '" + program[start] + "'");
+            }
+            var closing = findClosingBracket(program, start, end);
+            if (queryResult) {
+                executeProgram(program, start + 3, closing);
+            } else {
+                executeProgram(program, closing + 2, end - 1);
+            }
+        }
+
+        // Painting
+
+        function fillInternal(ctx, x, y, style) {
+            ctx.fillStyle = style;
+            ctx.fillRect(x * cellWH + 2, y * cellWH + 2, cellWH - 4, cellWH - 4);
+        }
+
+        function repaint() {
+            var ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            var fgStyle = "#808080";
+            ctx.strokeStyle = fgStyle;
+            for (var i = 0; i <= size; ++i) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * cellWH);
+                ctx.lineTo(size * cellWH, i * cellWH);
+                ctx.stroke();
+                ctx.moveTo(i * cellWH, 0);
+                ctx.lineTo(i * cellWH, size * cellWH);
+                ctx.stroke();
+            }
+            for (var x = 0; x < size; ++x) {
+                for (var y = 0; y < size; ++y) {
+                    if (x == saveX && y == saveY) {
+                        var hcw = cellWH / 2;
+                        var cx = x * cellWH + hcw;
+                        var cy = y * cellWH + hcw;
+                        var xx = hcw * dx[saveD], xy = hcw * dy[saveD];
+                        var yx = xy, yy = -xx;
+                        ctx.strokeStyle = "#FF0000";
+                        ctx.beginPath();
+                        ctx.moveTo(cx + xx + yx, cy + xy + yy);
+                        ctx.lineTo(cx - xx + yx, cy - xy + yy);
+                        ctx.lineTo(cx - xx - yx, cy - xy - yy);
+                        ctx.lineTo(cx + xx - yx, cy + xy - yy);
+                        ctx.stroke();
+                    }
+                    if (x == trgX && y == trgY) {
+                        fillInternal(ctx, x, y, "#40FF40");
+                    }
+                    if (field[x][y] == '#') {
+                        fillInternal(ctx, x, y, fgStyle);
+                    }
+                    if (x == bugX && y == bugY) {
+                        var hcw = cellWH / 2 - 2;
+                        var cx = x * cellWH + hcw + 2;
+                        var cy = y * cellWH + hcw + 2;
+                        var xx = hcw * dx[bugD], xy = hcw * dy[bugD];
+                        var yx = xy, yy = -xx;
+                        ctx.fillStyle = crashed ? "#FF4040" : "#4040FF";
+                        ctx.beginPath();
+                        ctx.moveTo(cx - xx - yx, cy - xy - yy);
+                        ctx.lineTo(cx + xx, cy + xy);
+                        ctx.lineTo(cx - xx + yx, cy - xy + yy);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                }
+            }
+            document.getElementById("vars-state").innerText = state;
+            for (var i = 0; i < 4; ++i) {
+                document.getElementById("vars-m" + i).innerText = canMove(i);
+                document.getElementById("vars-c" + i).innerText = moveCool(i);
+            }
+            document.getElementById("vars-qt").innerText = isAtTarget();
+            document.getElementById("vars-qs").innerText = isAtSaved();
+            document.getElementById("vars-qb").innerText = isBetterThanSaved();
+        }
+
+        parse();
+        repaint();
+    </script>
+</body>
+</html>
